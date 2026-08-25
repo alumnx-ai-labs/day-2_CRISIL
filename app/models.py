@@ -1,8 +1,10 @@
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
-from typing import Optional
+from typing import Annotated, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints, field_validator
+
+TagValue = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=50)]
 
 
 class TaskStatus(str, Enum):
@@ -23,6 +25,9 @@ class Task(BaseModel):
     description: str = ""
     status: TaskStatus = TaskStatus.PENDING
     priority: TaskPriority = TaskPriority.MEDIUM
+    assigned_to: Optional[str] = None
+    tags: list[TagValue] = Field(default_factory=list, max_length=20)
+    due_date: Optional[date] = None
     created_at: datetime
 
 
@@ -31,6 +36,16 @@ class TaskCreate(BaseModel):
     description: str = Field(default="", max_length=2000)
     status: TaskStatus = TaskStatus.PENDING
     priority: TaskPriority = TaskPriority.MEDIUM
+    assigned_to: Optional[str] = Field(default=None, max_length=200)
+    tags: list[TagValue] = Field(default_factory=list, max_length=20)
+    due_date: Optional[date] = None
+
+    @field_validator("due_date")
+    @classmethod
+    def validate_due_date(cls, value: Optional[date]) -> Optional[date]:
+        if value is not None and value < date.today():
+            raise ValueError("due_date must be today or later")
+        return value
 
 
 class TaskUpdate(BaseModel):
@@ -38,3 +53,6 @@ class TaskUpdate(BaseModel):
     description: Optional[str] = Field(default=None, max_length=2000)
     status: Optional[TaskStatus] = None
     priority: Optional[TaskPriority] = None
+    assigned_to: Optional[str] = Field(default=None, max_length=200)
+    tags: list[TagValue] = Field(default_factory=list, max_length=20)
+    due_date: Optional[date] = None

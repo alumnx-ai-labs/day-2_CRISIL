@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -18,11 +19,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     # Surface invalid input (e.g. missing/blank title) as 400 instead of the default 422
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
-        content={"detail": exc.errors()},
+        content={"detail": jsonable_encoder(exc.errors())},
     )
-
-# Write get_tasks_by_priority() to return a list of tasks filtered by priority. The endpoint should be GET /tasks/priority/{priority} and return a 200 status code with the list of tasks in the response body. If no tasks match the given priority, return an empty list.
-@
 
 @app.get("/health", tags=["health"])
 def health_check() -> dict[str, str]:

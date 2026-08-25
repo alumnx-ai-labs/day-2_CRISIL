@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -14,8 +15,16 @@ def create_task(task_data: TaskCreate) -> Task:
 
 
 @router.get("", response_model=list[Task])
-def get_all_tasks(status_filter: Optional[TaskStatus] = Query(default=None, alias="status")) -> list[Task]:
-    return task_repository.get_all_tasks(status=status_filter)
+def get_all_tasks(
+    status_filter: Optional[TaskStatus] = Query(default=None, alias="status"),
+    assigned_to: Optional[str] = Query(default=None),
+    due_before: Optional[date] = Query(default=None),
+) -> list[Task]:
+    return task_repository.get_all_tasks(
+        status=status_filter,
+        assigned_to=assigned_to,
+        due_before=due_before,
+    )
 
 
 @router.get("/{task_id}", response_model=Task)
