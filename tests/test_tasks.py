@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 import pytest
 
 def _create_task(client, **overrides):
@@ -8,6 +10,7 @@ def _create_task(client, **overrides):
         "priority": "high",
         "assigned_to": "alice@example.com",
         "tags": ["testing", "backend"],
+        "due_date": None,
     }
     payload.update(overrides)
     return client.post("/tasks", json=payload)
@@ -82,6 +85,37 @@ class TestCreateTask:
 
     def test_create_task_rejects_tag_overflow(self, client):
         response = _create_task(client, tags=[f"tag-{i}" for i in range(21)])
+        assert response.status_code == 400
+
+    def test_create_task_accepts_today_due_date(self, client):
+        due_date = date.today().isoformat()
+        response = _create_task(client, due_date=due_date)
+
+        assert response.status_code == 201
+        assert response.json()["due_date"] == due_date
+
+    def test_create_task_accepts_future_due_date(self, client):
+        due_date = (date.today() + timedelta(days=7)).isoformat()
+        response = _create_task(client, due_date=due_date)
+
+        assert response.status_code == 201
+        assert response.json()["due_date"] == due_date
+
+    def test_create_task_without_due_date_defaults_to_none(self, client):
+        response = _create_task(client)
+
+        assert response.status_code == 201
+        assert response.json()["due_date"] is None
+
+    def test_create_task_rejects_past_due_date(self, client):
+        due_date = (date.today() - timedelta(days=1)).isoformat()
+        response = _create_task(client, due_date=due_date)
+
+        assert response.status_code == 400
+
+    def test_create_task_rejects_malformed_due_date(self, client):
+        response = _create_task(client, due_date="not-a-date")
+
         assert response.status_code == 400
 
 
@@ -193,6 +227,119 @@ class TestUpdateTask:
         response = client.put(f"/tasks/{created['id']}", json={"tags": ["fresh"]})
         assert response.status_code == 200
         assert response.json()["tags"] == ["fresh"]
+
+    def test_update_task_sets_and_replaces_due_date(self, client):
+        created = _create_task(client).json()
+        first_due_date = (date.today() + timedelta(days=3)).isoformat()
+        second_due_date = (date.today() + timedelta(days=10)).isoformat()
+
+        first_response = client.put(
+            f"/tasks/{created['id']}", json={"due_date": first_due_date}
+        )
+        second_response = client.put(
+            f"/tasks/{created['id']}", json={"due_date": second_due_date}
+        )
+
+        assert first_response.status_code == 200
+        assert first_response.json()["due_date"] == first_due_date
+        assert second_response.status_code == 200
+        assert second_response.json()["due_date"] == second_due_date
+
+    def test_update_task_clears_due_date_with_null(self, client):
+        due_date = (date.today() + timedelta(days=3)).isoformat()
+        created = _create_task(client, due_date=due_date).json()
+
+        response = client.put(
+            f"/tasks/{created['id']}", json={"due_date": None}
+        )
+
+        assert response.status_code == 200
+        assert response.json()["due_date"] is None
+
+    def test_update_task_omitting_due_date_preserves_value(self, client):
+        due_date = (date.today() + timedelta(days=3)).isoformat()
+        created = _create_task(client, due_date=due_date).json()
+
+        response = client.put(
+            f"/tasks/{created['id']}", json={"title": "Updated title"}
+        )
+
+        assert response.status_code == 200
+        assert response.json()["due_date"] == due_date
+        assert response.json()["title"] == "Updated title"
+
+    def test_update_task_rejects_malformed_due_date(self, client):
+        created = _create_task(client).json()
+
+        response = client.put(
+            f"/tasks/{created['id']}", json={"due_date": "not-a-date"}
+        )
+
+        assert response.status_code == 400
+
+    def test_update_task_due_date_not_found_returns_404(self, client):
+        response = client.put(
+            "/tasks/9999", json={"due_date": date.today().isoformat()}
+        )
+
+        assert response.status_code == 404
+
+
+class TestDueDateFilter:
+    def test_filter_due_before_excludes_equal_later_and_undated_tasks(self, client):
+        cutoff = date.today() + timedelta(days=10)
+        _create_task(client, title="Before", due_date=(cutoff - timedelta(days=1)).isoformat())
+        _create_task(client, title="Equal", due_date=cutoff.isoformat())
+        _create_task(client, title="After", due_date=(cutoff + timedelta(days=1)).isoformat())
+        _create_task(client, title="Undated")
+
+        response = client.get("/tasks", params={"due_before": cutoff.isoformat()})
+
+        assert response.status_code == 200
+        assert [task["title"] for task in response.json()] == ["Before"]
+
+    def test_filter_due_before_returns_empty_when_no_tasks_match(self, client):
+        cutoff = date.today()
+        _create_task(client, due_date=cutoff.isoformat())
+
+        response = client.get("/tasks", params={"due_before": cutoff.isoformat()})
+
+        assert response.status_code == 200
+        assert response.json() == []
+
+    def test_filter_due_before_rejects_invalid_date(self, client):
+        response = client.get("/tasks", params={"due_before": "not-a-date"})
+
+        assert response.status_code == 400
+
+    def test_filter_due_before_composes_with_existing_filters(self, client):
+        cutoff = date.today() + timedelta(days=10)
+        _create_task(
+            client,
+            title="Matching task",
+            assigned_to="bob@example.com",
+            status="completed",
+            due_date=(cutoff - timedelta(days=1)).isoformat(),
+        )
+        _create_task(
+            client,
+            title="Wrong assignee",
+            assigned_to="alice@example.com",
+            status="completed",
+            due_date=(cutoff - timedelta(days=1)).isoformat(),
+        )
+
+        response = client.get(
+            "/tasks",
+            params={
+                "due_before": cutoff.isoformat(),
+                "status": "completed",
+                "assigned_to": "bob@example.com",
+            },
+        )
+
+        assert response.status_code == 200
+        assert [task["title"] for task in response.json()] == ["Matching task"]
 
 
 class TestDeleteTask:

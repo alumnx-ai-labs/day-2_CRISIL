@@ -10,7 +10,7 @@ A simple in-memory Task Management REST API built with FastAPI.
 app/
   __init__.py
   models.py      # Task, TaskCreate, TaskUpdate, TaskStatus, TaskPriority enums
-  repository.py  # In-memory TaskRepository (create/get/update/delete + status filter)
+  repository.py  # In-memory TaskRepository (CRUD + status/assignee/due-date filters)
   routes.py      # /tasks endpoints with 404/400 error handling
   main.py        # FastAPI app, validation error handler, entry point
 tests/
@@ -47,7 +47,7 @@ pytest -q
 | Method | Path              | Description                                  |
 |--------|-------------------|-----------------------------------------------|
 | POST   | `/tasks`          | Create a task                                 |
-| GET    | `/tasks`          | List tasks (optional `?status=` filter)       |
+| GET    | `/tasks`          | List tasks (optional `?status=`, `?assigned_to=`, or `?due_before=` filters) |
 | GET    | `/tasks/{id}`     | Get a task by id (404 if not found)           |
 | PUT    | `/tasks/{id}`     | Update a task (400 if body is empty/invalid)  |
 | DELETE | `/tasks/{id}`     | Delete a task (404 if not found)              |
@@ -60,4 +60,7 @@ pytest -q
 - `description`: string, optional
 - `status`: `pending` | `in_progress` | `completed`
 - `priority`: `low` | `medium` | `high`
+- `assigned_to`: string or null, optional
+- `tags`: list of strings, optional
+- `due_date`: ISO 8601 date (`YYYY-MM-DD`) or null, optional; on creation it must be today or later
 - `created_at`: timestamp, auto-generated

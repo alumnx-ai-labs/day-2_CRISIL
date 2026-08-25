@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -18,7 +19,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     # Surface invalid input (e.g. missing/blank title) as 400 instead of the default 422
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
-        content={"detail": exc.errors()},
+        content={"detail": jsonable_encoder(exc.errors())},
     )
 
 @app.get("/health", tags=["health"])

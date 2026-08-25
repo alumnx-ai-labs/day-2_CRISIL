@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from itertools import count
 from threading import Lock
 from typing import Optional
@@ -29,19 +29,29 @@ class TaskRepository:
                 priority=task_data.priority,
                 assigned_to=task_data.assigned_to,
                 tags=task_data.tags,
+                due_date=task_data.due_date,
                 created_at=datetime.now(timezone.utc),
             )
             self._tasks[task_id] = task
             return task
 
     def get_all_tasks(
-        self, status: Optional[TaskStatus] = None, assigned_to: Optional[str] = None
+        self,
+        status: Optional[TaskStatus] = None,
+        assigned_to: Optional[str] = None,
+        due_before: Optional[date] = None,
     ) -> list[Task]:
         tasks = list(self._tasks.values())
         if status is not None:
             tasks = [task for task in tasks if task.status == status]
         if assigned_to is not None:
             tasks = [task for task in tasks if task.assigned_to == assigned_to]
+        if due_before is not None:
+            tasks = [
+                task
+                for task in tasks
+                if task.due_date is not None and task.due_date < due_before
+            ]
         return sorted(tasks, key=lambda task: task.id)
 
     def get_task_by_id(self, task_id: int) -> Task:
